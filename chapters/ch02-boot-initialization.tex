@@ -1,0 +1,41 @@
+\chapter{系统启动与初始化}
+
+我将本系统的启动与初始化分为三个阶段：
+
+\begin{itemize}
+    \item \textbf{QEMU初始化}
+    \item \textbf{BootLoader初始化}
+    \item \textbf{内核初始化}
+\end{itemize}
+
+\section{QEMU初始化}
+
+这个阶段在实际启动中是ROM段。机器上电、文件加载到内存后，QEMU CPU的PC会被设置为0x1000，然后执行第一阶段的代码。
+它会对CPU进行一些初始化操作，然后把控制权移交给bootloader，它的跳转地址固定是0x80000000处，rustsbi-qemu.bin被预先加载到这里。
+
+\section{BootLoader初始化}
+
+在实际计算机中，Loader会进行内存初始化，并加载Runtime和BootLoader。BIOS和UEFI就是x86\_64架构的Loader。
+
+
+但在NimlothOS中，它们在QEMU初始化阶段便已经被加载到了内存中，跳转以后即可直接进入BootLoader部分。BootLoader在实际电脑中会进行OS镜像的加载，但
+NimlothOS的镜像是在QEMU启动前便加载到物理内存中了，因此它只需要作为RunTime并跳转到内核即可。
+
+Runtime固件程序为OS提供运行时服务，它是对硬件最基础的抽象，\href{https://github.com/riscv-non-isa/riscv-sbi-doc}{SBI}
+就是RISC-V架构下的Runtime规范，RustSBI的初始化结束以后，会跳转到预设好的0x80200000，这里放有内核镜像。
+
+\section{内核初始化}
+
+第三阶段便是内核控制的操作系统各个模块的初始化，下面进行详细介绍。
+
+\subsection{BSS段清零}
+
+\subsection{日志系统初始化}
+
+\subsection{内存系统初始化}
+
+\subsection{用户初始进程注册}
+
+\subsection{启用时钟中断}
+
+\subsection{进入主循环调度}

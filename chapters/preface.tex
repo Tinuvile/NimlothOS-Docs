@@ -1,0 +1,40 @@
+\chapter*{前言}
+\addcontentsline{toc}{chapter}{前言}
+
+学习操作系统以来，我就一直想写一个自己的OS，因此本次课设我的选题也毫无疑问就是这个。
+本以为我上学期看了一段时间xv6的源码，并写过几个Lab，跟着教程做应该问题不大，我最先看的是
+\href{https://os.phil-opp.com/}{Writing an OS in Rust}，这是一个在x86上构建的操作系统，
+但是仅仅写到地址分页部分就戛然而止，在这之后，我尝试将它从BIOS迁移到UEFI，花费了一些时间，
+但这个操作系统还剩下进程、并发等等较复杂的部分，再加上我对x86的熟悉程度不如RISC-V，我决定跟着
+\href{https://rcore-os.cn/rCore-Tutorial-Book-v3/index.html}{rCore-Tutorial-Book-v3 3.6.0-alpha.1}
+教程重新开始。
+
+严格意义上说，这不能算是我自己的OS，因为我只是跟着教程把代码敲了一遍，并没有什么创新和自己的设计，
+一方面，自己当时对操作系统的了解还有较大缺口，另外也是暑期时间有限。不过我对操作系统的探索不会结束，
+我很喜欢模块化设计，在这个过程中，我也发现了\href{https://github.com/unikraft/unikraft}{unikraft}
+和\href{https://github.com/arceos-org/arceos}{arceos}这样优秀的开源的模块化的操作系统，
+它们将是我未来学习的对象。
+
+\section*{rCore简介}
+
+rCore教程是一个从零开始搭建操作系统的教程，它把一个功能较为完整的操作系统拆解成了逐步的各个小型操作系统，
+我按照这个顺序依次实现了它们：
+
+\begin{itemize}
+    \item \textbf{LibOS}：让应用与硬件隔离
+    \item \textbf{BatchOS}：让应用与OS隔离
+    \item \textbf{Multiprog\&TimesharingOS}：允许多应用、分时共享CPU资源
+    \item \textbf{AddressSpaceOS}：隔离应用地址空间与内核地址空间
+    \item \textbf{ProcessOS}：支持应用动态创建新进程，添加进程和资源管理能力
+    \item \textbf{FileSystemOS}：添加文件系统，支持应用数据的持久化保存
+    \item \textbf{IPCOS}：实现进程间通信与I/O重定向
+    \item \textbf{Thread\&CoroutineOS}：完善并发功能，支持线程和协程
+    \item \textbf{SyncMutexOS}：在多线程APP中支持对共享资源的同步互斥访问
+    \item \textbf{DeviceOS}：支持基于外设中断的串口、块设备、键盘、鼠标、显示设备    
+\end{itemize}
+
+本文档也会按照这个顺序进行介绍。
+
+\section*{致谢}
+
+感谢王冬青、张惠娟老师对我的教学与帮助，感谢rCore、xv6、blogOS等优秀开源项目和操作系统教程。

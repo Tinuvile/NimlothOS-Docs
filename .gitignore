@@ -1,0 +1,35 @@
+# LaTeX 编译产生的临时文件
+*.aux
+*.bbl
+*.blg
+*.fdb_latexmk
+*.fls
+*.log
+*.out
+*.synctex.gz
+*.toc
+*.lof
+*.lot
+*.nav
+*.snm
+*.vrb
+*.bcf
+*.run.xml
+
+# 编译输出目录
+build/
+$OUTDIR/
+
+# 操作系统生成的文件
+.DS_Store
+Thumbs.db
+
+# 编辑器临时文件
+*~
+*.swp
+*.swo
+.vscode/
+.idea/
+
+# PDF 输出文件（可选，根据需要决定是否忽略）
+# *.pdf
