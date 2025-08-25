@@ -2,23 +2,16 @@
 \addcontentsline{toc}{chapter}{前言}
 
 学习操作系统以来，我就一直想写一个自己的OS，因此本次课设我的选题也毫无疑问就是这个。
-本以为我上学期看了一段时间xv6的源码，并写过几个Lab，跟着教程做应该问题不大，我最先看的是
+本以为我上学期看了一段时间xv6的源码，并写过一些Lab，跟着教程做应该问题不大，我最先看的是
 \href{https://os.phil-opp.com/}{Writing an OS in Rust}，这是一个在x86上构建的操作系统，
-但是仅仅写到地址分页部分就戛然而止，在这之后，我尝试将它从BIOS迁移到UEFI，花费了一些时间，
-但这个操作系统还剩下进程、并发等等较复杂的部分，再加上我对x86的熟悉程度不如RISC-V，我决定跟着
+但是仅仅写到地址分页部分就戛然而止，在这之后，我尝试将它从BIOS迁移到UEFI，但花费的时间比我预期多很多，
+暑假时间有限，但这个操作系统还剩下进程、并发等等复杂的部分，再加上我对x86的熟悉程度不如RISC-V，因此我还是决定跟着
 \href{https://rcore-os.cn/rCore-Tutorial-Book-v3/index.html}{rCore-Tutorial-Book-v3 3.6.0-alpha.1}
 教程重新开始。
 
-严格意义上说，这不能算是我自己的OS，因为我只是跟着教程把代码敲了一遍，并没有什么创新和自己的设计，
-一方面，自己当时对操作系统的了解还有较大缺口，另外也是暑期时间有限。不过我对操作系统的探索不会结束，
-我很喜欢模块化设计，在这个过程中，我也发现了\href{https://github.com/unikraft/unikraft}{unikraft}
-和\href{https://github.com/arceos-org/arceos}{arceos}这样优秀的开源的模块化的操作系统，
-它们将是我未来学习的对象。
-
-\section*{rCore简介}
-
 rCore教程是一个从零开始搭建操作系统的教程，它把一个功能较为完整的操作系统拆解成了逐步的各个小型操作系统，
-我按照这个顺序依次实现了它们：
+这也是我在暑假阶段主要完成的内容，我跟着教程完成了以下各个部分的实现。代码和提交记录参见
+\href{https://github.com/Tinuvile/NimlothOS}{github}上的各个分支。
 
 \begin{itemize}
     \item \textbf{LibOS}：让应用与硬件隔离
@@ -33,8 +26,22 @@ rCore教程是一个从零开始搭建操作系统的教程，它把一个功能
     \item \textbf{DeviceOS}：支持基于外设中断的串口、块设备、键盘、鼠标、显示设备    
 \end{itemize}
 
-本文档也会按照这个顺序进行介绍。
+通过实操以上完整的操作系统的实现过程，我了解了很多之前一知半解或者根本不知道的代码细节。
+而在教程之外，我也对它进行了一些优化和改造。目前我正在尝试把它改为微内核设计，将日志系统、
+文件系统和驱动等部分从内核中取出来。我已经完成的优化与改造主要包括：
+
+\begin{itemize}
+    \item \textbf{添加内存懒加载机制}
+    \item \textbf{添加COW机制}
+    \item \textbf{改进进程调度算法}
+    \item \textbf{支持多核处理器} （这个的实现目前还有较多Bug）
+\end{itemize}
+
+同时我也很喜欢模块化设计，在暑假的学习过程中，我发现了\href{https://github.com/unikraft/unikraft}{unikraft}
+和\href{https://github.com/arceos-org/arceos}{arceos}这样优秀开源的模块化操作系统，
+它们将是我未来学习的对象。
 
 \section*{致谢}
 
-感谢王冬青、张惠娟老师对我的教学与帮助，感谢rCore、xv6、blogOS等优秀开源项目和操作系统教程。
+在操作系统的学习旅途中，非常感谢王冬青、张惠娟两位老师对我的教学与帮助，同时也衷心感谢rCore、xv6、blogOS等优秀开源项目和操作系统教程，
+希望他们越来越好。
