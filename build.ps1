@@ -26,18 +26,18 @@ function Create-OutputDir {
 function Build-PDF {
     Create-OutputDir
     Write-Host "Building PDF document..."
-    & $LATEX -output-directory=$OUTDIR "$MAIN.tex"
-    & $LATEX -output-directory=$OUTDIR "$MAIN.tex"
+    & $LATEX -shell-escape -output-directory=$OUTDIR "$MAIN.tex"
+    & $LATEX -shell-escape -output-directory=$OUTDIR "$MAIN.tex"
     Write-Host "PDF build completed: $OUTDIR\$MAIN.pdf"
 }
 
 function Build-Full {
     Create-OutputDir
     Write-Host "Full build with bibliography..."
-    & $LATEX -output-directory=$OUTDIR "$MAIN.tex"
+    & $LATEX -shell-escape -output-directory=$OUTDIR "$MAIN.tex"
     & $BIBTEX "$OUTDIR\$MAIN"
-    & $LATEX -output-directory=$OUTDIR "$MAIN.tex"
-    & $LATEX -output-directory=$OUTDIR "$MAIN.tex"
+    & $LATEX -shell-escape -output-directory=$OUTDIR "$MAIN.tex"
+    & $LATEX -shell-escape -output-directory=$OUTDIR "$MAIN.tex"
     Write-Host "Full build completed: $OUTDIR\$MAIN.pdf"
 }
 

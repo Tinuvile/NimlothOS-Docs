@@ -11,6 +11,12 @@
 \usepackage{listings}
 \usepackage{xcolor}
 
+% 定义listings需要的颜色
+\definecolor{RoyalBlue}{RGB}{65,105,225}
+\definecolor{TealBlue}{RGB}{54,117,136}
+\definecolor{BrickRed}{RGB}{205,92,92}
+\definecolor{Purple}{RGB}{128,0,128}
+
 % 图片支持
 \usepackage{graphicx}
 \usepackage{float}
@@ -22,6 +28,8 @@
 % 表格
 \usepackage{booktabs}
 \usepackage{longtable}
+\usepackage{tikz}
+\usetikzlibrary{positioning,calc,fit}
 
 % 链接支持 - 必须放在最后加载
 \usepackage{hyperref}
@@ -31,12 +39,41 @@
 \setcounter{tocdepth}{3}
 \setcounter{secnumdepth}{3}
 
-% 代码样式设置
+% 定义Rust语言支持
+\lstdefinelanguage{Rust}{
+    keywords={
+        as, break, const, continue, crate, else, enum, extern, false, fn,
+        for, if, impl, in, let, loop, match, mod, move, mut, pub, ref,
+        return, self, Self, static, struct, super, trait, true, type, unsafe,
+        use, where, while, async, await, dyn
+    },
+    keywordstyle=\color{RoyalBlue}\bfseries,
+    ndkeywords={
+        bool, u8, u16, u32, u64, u128, i8, i16, i32, i64, i128, f32, f64,
+        usize, isize, char, str, String, Vec, Option, Result, Box
+    },
+    ndkeywordstyle=\color{Purple}\bfseries,
+    identifierstyle=\color{black},
+    sensitive=true,
+    comment=[l]{//},
+    morecomment=[s]{/*}{*/},
+    commentstyle=\color{TealBlue}\ttfamily,
+    stringstyle=\color{BrickRed}\ttfamily,
+    morestring=[b]"
+    % 不使用单引号作为字符串分隔符，避免与Rust生命周期语法冲突
+    % morestring=[b]'
+}
+
+% 定义一个"纯文本"语言用于命令输出/日志
+\lstdefinelanguage{Plain}{sensitive=false}
+
+% listings代码样式设置
 \lstset{
-    basicstyle=\ttfamily\small,
-    keywordstyle=\color{blue},
-    commentstyle=\color{gray},
-    stringstyle=\color{red},
+    language=Rust,
+    basicstyle=\ttfamily\small\color{black},
+    keywordstyle=\color{RoyalBlue}\bfseries,
+    commentstyle=\color{TealBlue},
+    stringstyle=\color{BrickRed},
     numbers=left,
     numberstyle=\tiny\color{gray},
     stepnumber=1,
@@ -52,30 +89,6 @@
     breaklines=true,
     breakatwhitespace=false,
     escapeinside={\%*}{*)}
-}
-
-% 定义Rust语言支持
-\lstdefinelanguage{Rust}{
-    keywords={
-        as, break, const, continue, crate, else, enum, extern, false, fn,
-        for, if, impl, in, let, loop, match, mod, move, mut, pub, ref,
-        return, self, Self, static, struct, super, trait, true, type, unsafe,
-        use, where, while, async, await, dyn
-    },
-    keywordstyle=\color{blue}\bfseries,
-    ndkeywords={
-        bool, u8, u16, u32, u64, u128, i8, i16, i32, i64, i128, f32, f64,
-        usize, isize, char, str, String, Vec, Option, Result, Box
-    },
-    ndkeywordstyle=\color{purple}\bfseries,
-    identifierstyle=\color{black},
-    sensitive=true,
-    comment=[l]{//},
-    morecomment=[s]{/*}{*/},
-    commentstyle=\color{gray}\ttfamily,
-    stringstyle=\color{red}\ttfamily,
-    morestring=[b]",
-    morestring=[b]'
 }
 
 % 超链接样式
@@ -147,34 +160,28 @@
 \include{chapters/ch02-boot-initialization}
 
 % 第三章：内存管理系统
-% \include{chapters/ch03-memory-management}
+\include{chapters/ch03-memory-management}
 
-% 第四章：任务管理与调度
-% \include{chapters/ch04-task-scheduling}
+% 第四章：任务管理与调度（任务、进程以及进程间通信、后面可能再加线程）
+\include{chapters/ch04-process-scheduling}
 
-% 第五章：中断与异常处理
-% \include{chapters/ch05-interrupt-exception}
+% 第五章：中断与异常处理（特权级切换机制、中断处理机制、函数调用机制）
+\include{chapters/ch05-interrupt-exception}
 
-% 第六章：系统调用接口
-% \include{chapters/ch06-syscall-interface}
+% 第六章：系统调用接口（罗列即可）
+\include{chapters/ch06-syscall-interface}
 
 % 第七章：文件系统
-% \include{chapters/ch07-filesystem}
+\include{chapters/ch07-filesystem}
 
 % 第八章：设备驱动程序
 % \include{chapters/ch08-device-drivers}
 
-% 第九章：同步与互斥
+% 第九章：同步与互斥（信号量、进程间同步、等待队列、死锁处理等，如果有多核还需要多核同步）
 % \include{chapters/ch09-synchronization}
 
-% 第十章：系统工具与调试
-% \include{chapters/ch10-system-tools}
-
-% 第十一章：用户程序与测试
+% 第十章：用户程序与测试
 % \include{chapters/ch11-user-programs}
-
-% 第十二章：性能优化与扩展
-% \include{chapters/ch12-optimization}
 
 % 附录
 \appendix
