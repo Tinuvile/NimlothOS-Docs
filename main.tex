@@ -31,6 +31,11 @@
 \usepackage{tikz}
 \usetikzlibrary{positioning,calc,fit}
 
+% 列表间距控制
+\usepackage{enumitem}
+\setlist[itemize]{itemsep=0.5ex,parsep=0pt,topsep=0pt,partopsep=0pt,before={\vspace{-0.2ex}},after={\vspace{-0.5ex}}}
+\setlist[enumerate]{itemsep=0.5ex,parsep=0pt,topsep=0pt,partopsep=0pt,before={\vspace{-0.2ex}},after={\vspace{-0.5ex}}}
+
 % 链接支持 - 必须放在最后加载
 \usepackage{hyperref}
 \usepackage{bookmark}
