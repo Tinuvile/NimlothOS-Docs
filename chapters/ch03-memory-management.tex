@@ -883,7 +883,3 @@ pub fn switch_address_space(new_memory_set: &MemorySet) {
 \end{lstlisting}
 
 切换过程首先检查新旧地址空间是否相同，避免不必要的切换开销。当需要切换时，更新satp寄存器并执行\lstinline[language=Rust]{sfence.vma}指令刷新TLB，确保后续的地址转换使用新的页表。
-
-\section{总结}
-
-通过这样的设计，NimlothOS实现了完整的虚拟内存管理体系，为进程隔离和内存保护提供了基础。每个进程都拥有独立的虚拟地址空间，内核通过权限控制确保系统的安全性和稳定性。
