@@ -3,8 +3,7 @@
 
 学习操作系统以来，我就一直想写一个自己的OS，因此本次课设我的选题也毫无疑问就是这个。我最先看的是
 \href{https://os.phil-opp.com/}{Writing an OS in Rust}，这是一个在x86上构建的操作系统，
-但作者仅仅写到地址分页部分就戛然而止，在这之后，我尝试将它从BIOS迁移到UEFI，但花费的时间比我预期多很多，
-暑假时间有限，但这个操作系统还剩下进程、并发等等复杂的部分，再加上我对x86的熟悉程度不如RISC-V，因此我决定跟着
+但作者仅仅写到地址分页部分就戛然而止，考虑到暑假时间有限，加上我对x86的熟悉程度不如RISC-V，我决定跟着
 \href{https://rcore-os.cn/rCore-Tutorial-Book-v3/index.html}{rCore-Tutorial-Book-v3 3.6.0-alpha.1}
 教程重新开始。
 
@@ -25,15 +24,7 @@ rCore教程是一个从零开始搭建操作系统的教程，它把一个功能
     % \item \textbf{DeviceOS}：支持基于外设中断的串口、块设备、键盘、鼠标、显示设备    
 \end{itemize}
 
-通过实操以上完整的操作系统的实现过程，我了解了很多代码细节。而在教程之外，我也对它进行了一些优化和改造。
-目前我正在尝试把它改为微内核设计，将日志系统、文件系统和驱动等部分从内核中取出来。我已经完成的优化与改造主要包括：
-
-\begin{itemize}
-    \item \textbf{添加内存懒加载机制}
-    \item \textbf{添加COW机制}
-    \item \textbf{改进进程调度算法}
-    \item \textbf{支持多核处理器} （这个的实现目前还有较多Bug）
-\end{itemize}
+当然，目前的操作系统仍有很多不足，我希望在未来继续完善它。比如添加线程管理机制、完善I/O设备管理机制和添加更多的设备驱动等。
 
 同时我也很喜欢模块化设计，在暑假的学习过程中，我发现了\href{https://github.com/unikraft/unikraft}{unikraft}
 和\href{https://github.com/arceos-org/arceos}{arceos}这样优秀开源的模块化操作系统，

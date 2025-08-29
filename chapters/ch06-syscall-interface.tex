@@ -1,1 +1,655 @@
 \chapter{系统调用接口}
+
+\section{系统设计}
+
+系统调用接口是用户程序与操作系统内核交互的标准机制，它为用户程序访问系统服务提供了一套统一的API。
+NimlothOS实现了完整的系统调用体系，支持文件操作、进程管理、信号处理等核心功能。
+
+\subsection{调用约定}
+
+NimlothOS遵循RISC-V架构的标准系统调用约定，使用\texttt{ecall}指令触发系统调用。
+调用参数通过寄存器传递：系统调用号存储在\texttt{a7}寄存器，
+参数按顺序存储在\texttt{a0}、\texttt{a1}、\texttt{a2}寄存器中，
+返回值通过\texttt{a0}寄存器返回给用户程序。
+
+\subsection{系统调用分类}
+
+NimlothOS的系统调用按功能分为三大类：
+
+\textbf{文件系统接口}提供了完整的文件I/O功能，包括文件的打开、关闭、读写操作，
+以及管道通信机制，支持进程间的数据交换和重定向操作。
+
+\textbf{进程管理接口}实现了完整的进程生命周期管理，支持进程创建、执行、等待和退出，
+提供了fork-exec模型的完整实现，支持多进程并发执行和父子进程协作。
+
+\textbf{信号处理接口}提供了异步事件处理机制，支持信号的发送、接收和自定义处理，
+实现了类Unix的信号语义，为异常处理和进程间通信提供了支撑。
+
+\subsection{安全机制}
+
+系统调用的安全性通过多个层面保障。首先是\textbf{地址空间隔离}，
+所有用户空间指针都通过地址转换函数安全访问，防止用户程序访问内核内存。
+其次是\textbf{参数验证}，系统调用会检查所有输入参数的合法性，
+包括文件描述符范围、内存地址有效性等。最后是\textbf{资源控制}，
+通过进程控制块管理用户程序的资源使用，防止资源泄漏和滥用。
+
+\noindent
+\rule{0.4\textwidth}{0.4pt}
+\hfill
+\text{以下为实现介绍}
+\hfill
+\rule{0.4\textwidth}{0.4pt}
+
+\section{系统调用分发机制}
+
+系统调用的处理始于陷阱处理程序，当用户程序执行\texttt{ecall}指令时，
+硬件自动切换到内核态并跳转到陷阱处理入口。陷阱处理程序识别系统调用类型后，
+调用\texttt{syscall}函数进行具体的系统调用分发。
+
+\begin{lstlisting}[language=Rust,caption={系统调用分发器}, label={lst:syscall-dispatcher}]
+pub fn syscall(syscall_id: usize, args: [usize; 3]) -> isize {
+    match syscall_id {
+        SYSCALL_READ => sys_read(args[0], args[1] as *const u8, args[2]),
+        SYSCALL_WRITE => sys_write(args[0], args[1] as *const u8, args[2]),
+        SYSCALL_EXIT => sys_exit(args[0] as i32),
+        SYSCALL_YIELD => sys_yield(),
+        SYSCALL_TIME => sys_time(),
+        SYSCALL_PID => sys_pid(),
+        SYSCALL_FORK => sys_fork(),
+        SYSCALL_EXEC => sys_exec(args[0] as *const u8, args[1] as *const usize),
+        SYSCALL_WAITPID => sys_waitpid(args[0] as isize, args[1] as *mut i32),
+        SYSCALL_OPEN => sys_open(args[0] as *const u8, args[1] as u32),
+        SYSCALL_CLOSE => sys_close(args[0]),
+        SYSCALL_DUP => sys_dup(args[0]),
+        SYSCALL_PIPE => sys_pipe(args[0] as *mut usize),
+        SYSCALL_KILL => sys_kill(args[0], args[1] as i32),
+        SYSCALL_SIGACTION => sys_sigaction(
+            args[0] as i32,
+            args[1] as *const SignalAction,
+            args[2] as *mut SignalAction,
+        ),
+        SYSCALL_SIGPROCMASK => sys_sigprocmask(args[0] as u32),
+        SYSCALL_SIGRETURN => sys_sigreturn(),
+        _ => panic!("Unsupported syscall_id: {}", syscall_id),
+    }
+}
+\end{lstlisting}
+
+分发器采用模式匹配机制，根据系统调用号将请求路由到对应的处理函数。这样也便于扩展新的系统调用功能。
+不支持的系统调用会导致系统panic，确保了接口的严格性和系统的稳定性。
+
+\section{文件系统接口}
+
+文件系统接口提供了标准的POSIX风格文件操作，支持文件的创建、读写、关闭等基本操作，
+以及管道通信等高级功能。所有文件操作都基于文件描述符，提供了统一的I/O抽象。
+
+\subsection{用户空间缓冲区访问}
+
+由于用户程序和内核运行在不同的地址空间中，内核需要安全地访问用户空间的缓冲区数据。
+NimlothOS通过\texttt{UserBuffer}抽象和地址转换函数来解决这个问题。
+
+\texttt{translated\_byte\_buffer}函数将用户空间的缓冲区转换为内核可以安全访问的页面切片：
+
+\begin{lstlisting}[language=Rust,caption={用户空间缓冲区转换}, label={lst:translated-buffer}]
+pub fn translated_byte_buffer(token: usize, ptr: *const u8, len: usize) -> Vec<&'static mut [u8]> {
+    let page_table = PageTable::from_token(token);
+    let mut start = ptr as usize;
+    let end = start + len;
+    let mut v = Vec::new();
+    while start < end {
+        let start_va = VirtAddr::from(start);
+        let mut vpn = start_va.floor();
+        let ppn = page_table.translate(vpn).unwrap().ppn();
+        vpn.step();
+        let mut end_va: VirtAddr = vpn.into();
+        end_va = end_va.min(VirtAddr::from(end));
+        if end_va.page_offset() == 0 {
+            v.push(&mut ppn.bytes_array()[start_va.page_offset()..]);
+        } else {
+            v.push(&mut ppn.bytes_array()[start_va.page_offset()..end_va.page_offset()]);
+        }
+        start = end_va.into();
+    }
+    v
+}
+\end{lstlisting}
+
+\texttt{UserBuffer}结构封装了这些页面切片，提供了统一的读写接口：
+
+\begin{lstlisting}[language=Rust,caption={UserBuffer结构}, label={lst:user-buffer}]
+pub struct UserBuffer {
+    pub buffers: Vec<&'static mut [u8]>,
+}
+
+impl UserBuffer {
+    pub fn new(buffers: Vec<&'static mut [u8]>) -> Self {
+        Self { buffers }
+    }
+    
+    pub fn len(&self) -> usize {
+        let mut total: usize = 0;
+        for b in self.buffers.iter() {
+            total += b.len();
+        }
+        total
+    }
+}
+\end{lstlisting}
+
+这样可以保障系统的\textbf{安全性}，通过页表转换确保只访问用户程序拥有的内存页面；
+并自动处理跨越多个物理页面的缓冲区；为文件系统提供统一的缓冲区抽象，无需关心底层的地址空间差异。
+
+为支持文件系统的实际I/O操作，\texttt{UserBuffer}还实现了迭代器接口，
+允许文件系统逐字节或逐块地访问用户数据：
+
+\begin{lstlisting}[language=Rust,caption={UserBuffer迭代器实现}, label={lst:user-buffer-iter}]
+impl IntoIterator for UserBuffer {
+    type Item = *mut u8;
+    type IntoIter = UserBufferIterator;
+    
+    fn into_iter(self) -> Self::IntoIter {
+        UserBufferIterator {
+            buffers: self.buffers,
+            current_buffer: 0,
+            current_idx: 0,
+        }
+    }
+}
+
+pub struct UserBufferIterator {
+    buffers: Vec<&'static mut [u8]>,
+    current_buffer: usize,
+    current_idx: usize,
+}
+
+impl Iterator for UserBufferIterator {
+    type Item = *mut u8;
+    
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.current_buffer >= self.buffers.len() {
+            None
+        } else {
+            let r = &mut self.buffers[self.current_buffer][self.current_idx] as *mut _;
+            if self.current_idx + 1 == self.buffers[self.current_buffer].len() {
+                self.current_idx = 0;
+                self.current_buffer += 1;
+            } else {
+                self.current_idx += 1;
+            }
+            Some(r)
+        }
+    }
+}
+\end{lstlisting}
+
+它使得文件系统可以安全地遍历用户缓冲区中的每个字节，无论缓冲区是连续的还是跨越多个物理页面。
+
+\subsection{文件读写操作}
+
+\texttt{sys\_write}函数支持向文件描述符写入数据，通过\texttt{translated\_byte\_buffer}
+安全地访问用户空间缓冲区：
+
+\begin{lstlisting}[language=Rust,caption={文件写入系统调用}, label={lst:sys-write}]
+pub fn sys_write(fd: usize, buf: *const u8, len: usize) -> isize {
+    let token = current_user_token();
+    let process = current_process().unwrap();
+    let inner = process.inner_exclusive_access();
+    if fd >= inner.fd_table.len() {
+        return -1;
+    }
+    if let Some(file) = &inner.fd_table[fd] {
+        if !file.writable() {
+            return -1;
+        }
+        let file = file.clone();
+        drop(inner);
+        file.write(UserBuffer::new(translated_byte_buffer(token, buf, len))) as isize
+    } else {
+        -1
+    }
+}
+\end{lstlisting}
+
+对应的\texttt{sys\_read}函数提供读取功能：
+
+\begin{lstlisting}[language=Rust,caption={文件读取系统调用}, label={lst:sys-read}]
+pub fn sys_read(fd: usize, buf: *const u8, len: usize) -> isize {
+    let token = current_user_token();
+    let process = current_process().unwrap();
+    let inner = process.inner_exclusive_access();
+    if fd >= inner.fd_table.len() {
+        return -1;
+    }
+    if let Some(file) = &inner.fd_table[fd] {
+        if !file.readable() {
+            return -1;
+        }
+        let file = file.clone();
+        drop(inner);
+        file.read(UserBuffer::new(translated_byte_buffer(token, buf, len))) as isize
+    } else {
+        -1
+    }
+}
+\end{lstlisting}
+
+\subsection{文件管理操作}
+
+\texttt{sys\_open}支持多种打开模式，通过\texttt{translated\_str}安全地读取用户空间的文件路径：
+
+\begin{lstlisting}[language=Rust,caption={文件打开系统调用}, label={lst:sys-open}]
+pub fn sys_open(path: *const u8, flags: u32) -> isize {
+    let process = current_process().unwrap();
+    let token = current_user_token();
+    let path = translated_str(token, path);
+    if let Some(inode) = open_file(path.as_str(), OpenFlags::from_bits(flags).unwrap()) {
+        let mut inner = process.inner_exclusive_access();
+        let fd = inner.alloc_fd();
+        inner.fd_table[fd] = Some(inode);
+        fd as isize
+    } else {
+        -1
+    }
+}
+\end{lstlisting}
+
+\texttt{sys\_close}负责关闭文件描述符并释放相关资源：
+
+\begin{lstlisting}[language=Rust,caption={文件关闭系统调用}, label={lst:sys-close}]
+pub fn sys_close(fd: usize) -> isize {
+    let process = current_process().unwrap();
+    let mut inner = process.inner_exclusive_access();
+    if fd >= inner.fd_table.len() {
+        return -1;
+    }
+    if inner.fd_table[fd].is_none() {
+        return -1;
+    }
+    inner.fd_table[fd].take();
+    0
+}
+\end{lstlisting}
+
+\subsection{文件描述符复制}
+
+\texttt{sys\_dup}函数实现文件描述符的复制功能，新旧描述符共享同一个底层文件对象：
+
+\begin{lstlisting}[language=Rust,caption={文件描述符复制}, label={lst:sys-dup}]
+pub fn sys_dup(fd: usize) -> isize {
+    let process = current_process().unwrap();
+    let mut inner = process.inner_exclusive_access();
+    if fd >= inner.fd_table.len() {
+        return -1;
+    }
+    if inner.fd_table[fd].is_none() {
+        return -1;
+    }
+    let new_fd = inner.alloc_fd();
+    inner.fd_table[new_fd] = Some(Arc::clone(inner.fd_table[fd].as_ref().unwrap()));
+    new_fd as isize
+}
+\end{lstlisting}
+
+\subsection{管道通信机制}
+
+\texttt{sys\_pipe}函数创建一对相互连接的文件描述符，支持进程间的单向数据传输：
+
+\begin{lstlisting}[language=Rust,caption={管道创建系统调用}, label={lst:sys-pipe}]
+pub fn sys_pipe(pipe: *mut usize) -> isize {
+    let process = current_process().unwrap();
+    let token = current_user_token();
+    let mut inner = process.inner_exclusive_access();
+    let (pipe_read, pipe_write) = make_pipe();
+    let read_fd = inner.alloc_fd();
+    inner.fd_table[read_fd] = Some(pipe_read);
+    let write_fd = inner.alloc_fd();
+    inner.fd_table[write_fd] = Some(pipe_write);
+    *translated_refmut(token, pipe) = read_fd;
+    *translated_refmut(token, unsafe { pipe.add(1) }) = write_fd;
+    0
+}
+\end{lstlisting}
+
+\section{进程管理接口}
+
+进程管理接口实现了完整的进程生命周期管理，提供了进程创建、执行、等待、退出等核心功能，
+支持多进程并发执行和父子进程协作机制。
+
+\subsection{进程控制操作}
+
+\texttt{sys\_exit}函数终止当前进程并设置退出码，会清理进程资源并调度下一个就绪进程运行：
+
+\begin{lstlisting}[language=Rust,caption={进程退出系统调用}, label={lst:sys-exit}]
+pub fn sys_exit(exit_code: i32) -> isize {
+    println!("[kernel] Application exited with code {}", exit_code);
+    exit_current_and_run_next(exit_code);
+    panic!("Unreachable in sys_exit!");
+}
+\end{lstlisting}
+
+\texttt{sys\_yield}函数实现协作式多进程，允许进程主动让出CPU时间片：
+
+\begin{lstlisting}[language=Rust,caption={进程让权系统调用}, label={lst:sys-yield}]
+pub fn sys_yield() -> isize {
+    suspend_current_and_run_next();
+    0
+}
+\end{lstlisting}
+
+\subsection{进程信息获取}
+
+\texttt{sys\_time}返回系统启动以来的毫秒数，\texttt{sys\_pid}返回当前进程的唯一标识符：
+
+\begin{lstlisting}[language=Rust,caption={系统时间获取}, label={lst:sys-time}]
+pub fn sys_time() -> isize {
+    time_ms() as isize
+}
+\end{lstlisting}
+
+\begin{lstlisting}[language=Rust,caption={进程ID获取}, label={lst:sys-pid}]
+pub fn sys_pid() -> isize {
+    current_process().unwrap().pid.0 as isize
+}
+\end{lstlisting}
+
+\subsection{进程创建与替换}
+
+\texttt{sys\_fork}函数创建当前进程的完整副本，父进程获得子进程PID，子进程返回值为0：
+
+\begin{lstlisting}[language=Rust,caption={进程复制系统调用}, label={lst:sys-fork}]
+pub fn sys_fork() -> isize {
+    let current_process = current_process().unwrap();
+    let new_process = current_process.fork();
+    let new_pid = new_process.pid.0;
+    let trap_cx = new_process.inner_exclusive_access().trap_cx();
+    trap_cx.x[10] = 0; // x[10] = a0，设置子进程返回值为0
+    add_process(new_process);
+    new_pid as isize
+}
+\end{lstlisting}
+
+\texttt{sys\_exec}函数用指定程序替换当前进程的地址空间，支持命令行参数传递：
+
+\begin{lstlisting}[language=Rust,caption={程序执行系统调用}, label={lst:sys-exec}]
+pub fn sys_exec(path: *const u8, mut args: *const usize) -> isize {
+    let token = current_user_token();
+    let path = translated_str(token, path);
+    let mut args_vec = Vec::new();
+    loop {
+        let arg_str_ptr = *translated_ref(token, args);
+        if arg_str_ptr == 0 {
+            break;
+        }
+        args_vec.push(translated_str(token, arg_str_ptr as *const u8));
+        unsafe {
+            args = args.add(1);
+        }
+    }
+    if let Some(data) = open_file(path.as_str(), OpenFlags::RDONLY) {
+        let all_data = data.read_all();
+        let process = current_process().unwrap();
+        let argc = args_vec.len();
+        process.exec(all_data.as_slice(), args_vec);
+        argc as isize
+    } else {
+        -1
+    }
+}
+\end{lstlisting}
+
+\subsection{进程同步机制}
+
+\texttt{sys\_waitpid}函数实现父子进程同步，支持等待特定PID的子进程或任意子进程结束：
+
+\begin{lstlisting}[language=Rust,caption={进程等待系统调用}, label={lst:sys-waitpid}]
+pub fn sys_waitpid(pid: isize, exit_code_ptr: *mut i32) -> isize {
+    let process = current_process().unwrap();
+    let mut inner = process.inner_exclusive_access();
+    if !inner
+        .children
+        .iter()
+        .any(|p| pid == -1 || pid as usize == p.getpid())
+    {
+        return -1;
+    }
+    let pair = inner.children.iter().enumerate().find(|(_, p)| {
+        p.inner_exclusive_access().is_zombie() && (pid == -1 || pid as usize == p.getpid())
+    });
+    if let Some((idx, _)) = pair {
+        let child = inner.children.remove(idx);
+        let found_pid = child.getpid();
+        let exit_code = child.inner_exclusive_access().exit_code;
+        *translated_refmut(inner.memory_set.token(), exit_code_ptr) = exit_code;
+        found_pid as isize
+    } else {
+        -2
+    }
+}
+\end{lstlisting}
+
+\section{信号处理接口}
+
+信号处理接口提供了异步事件处理机制，支持进程间信号通信和异常处理，
+实现了类Unix的信号语义，为系统异常处理和进程间通信提供了支持。
+
+\subsection{信号发送机制}
+
+\texttt{sys\_kill}函数支持向指定进程发送信号，会验证目标进程和信号的合法性：
+
+\begin{lstlisting}[language=Rust,caption={信号发送系统调用}, label={lst:sys-kill}]
+pub fn sys_kill(pid: usize, signum: i32) -> isize {
+    if let Some(process) = pid2process(pid) {
+        if let Some(flag) = SignalFlags::from_bits(1 << signum) {
+            let mut process_ref = process.inner_exclusive_access();
+            if process_ref.signals.contains(flag) {
+                return -1; // 信号已存在
+            }
+            process_ref.signals.insert(flag);
+            0
+        } else {
+            -1 // 非法信号编号
+        }
+    } else {
+        -1 // 目标进程不存在
+    }
+}
+\end{lstlisting}
+
+\subsection{信号处理配置}
+
+\texttt{sys\_sigaction}函数支持为指定信号安装自定义处理程序，禁止对关键信号的自定义处理：
+
+\begin{lstlisting}[language=Rust,caption={信号处理设置}, label={lst:sys-sigaction}]
+pub fn sys_sigaction(
+    signum: i32,
+    action: *const SignalAction,
+    old_action: *mut SignalAction,
+) -> isize {
+    let token = current_user_token();
+    let process = current_process().unwrap();
+    let mut inner = process.inner_exclusive_access();
+    if signum as usize > MAX_SIG {
+        return -1;
+    }
+    if let Some(flag) = SignalFlags::from_bits(1 << signum) {
+        if check_sigaction_error(flag, action as usize, old_action as usize) {
+            return -1; // 禁止对SIGKILL和SIGSTOP设置处理
+        }
+        let prev_action = inner.signal_actions.table[signum as usize];
+        *translated_refmut(token, old_action) = prev_action;
+        inner.signal_actions.table[signum as usize] = *translated_ref(token, action);
+        0
+    } else {
+        -1
+    }
+}
+\end{lstlisting}
+
+\subsection{信号屏蔽控制}
+
+\texttt{sys\_sigprocmask}函数允许进程控制信号的接收状态：
+
+\begin{lstlisting}[language=Rust,caption={信号屏蔽设置}, label={lst:sys-sigprocmask}]
+pub fn sys_sigprocmask(mask: u32) -> isize {
+    if let Some(process) = current_process() {
+        let mut inner = process.inner_exclusive_access();
+        let old_mask = inner.signal_mask;
+        if let Some(flag) = SignalFlags::from_bits(mask) {
+            inner.signal_mask = flag;
+            old_mask.bits() as isize
+        } else {
+            -1
+        }
+    } else {
+        -1
+    }
+}
+\end{lstlisting}
+
+\subsection{信号处理返回}
+
+\texttt{sys\_sigreturn}函数用于从用户信号处理程序返回到正常执行流程：
+
+\begin{lstlisting}[language=Rust,caption={信号处理返回}, label={lst:sys-sigreturn}]
+pub fn sys_sigreturn() -> isize {
+    if let Some(process) = current_process() {
+        let mut inner = process.inner_exclusive_access();
+        inner.handling_sig = -1; // 清除信号处理状态
+        let trap_ctx = inner.trap_cx();
+        *trap_ctx = inner.trap_ctx_backup.unwrap(); // 恢复上下文
+        trap_ctx.x[10] as isize
+    } else {
+        -1
+    }
+}
+\end{lstlisting}
+
+\section{用户态系统调用封装}
+
+用户态系统调用库为应用程序提供了便利的系统调用接口，隐藏了底层的汇编调用细节，
+提供了类型安全的Rust函数接口。
+
+\subsection{底层系统调用机制}
+
+用户态封装通过内联汇编实现系统调用的底层机制，将系统调用号和参数正确地传递给内核：
+
+\begin{lstlisting}[language=Rust,caption={底层系统调用实现}, label={lst:syscall-asm}]
+fn syscall(id: usize, args: [usize; 3]) -> isize {
+    let mut ret: isize;
+    unsafe {
+        asm!(
+            "ecall",
+            inlateout("x10") args[0] => ret,
+            in("x11") args[1],
+            in("x12") args[2],
+            in("x17") id
+        );
+    }
+    ret
+}
+\end{lstlisting}
+
+这个函数将系统调用号存储在\texttt{x17}寄存器，参数存储在\texttt{x10-x12}寄存器，
+通过\texttt{ecall}指令触发系统调用，返回值通过\texttt{x10}寄存器获取。
+
+\subsection{文件操作接口}
+
+文件操作函数提供了标准的文件I/O接口，支持字符串路径、字节数组缓冲区等常用数据类型：
+
+\begin{lstlisting}[language=Rust,caption={用户态文件操作}, label={lst:user-file-ops}]
+pub fn open(path: &str, flags: OpenFlags) -> isize {
+    sys_open(path, flags.bits())
+}
+
+pub fn read(fd: usize, buf: &mut [u8]) -> isize {
+    sys_read(fd, buf)
+}
+
+pub fn write(fd: usize, buf: &[u8]) -> isize {
+    sys_write(fd, buf)
+}
+
+pub fn close(fd: usize) -> isize {
+    sys_close(fd)
+}
+
+pub fn pipe(pipe_fd: &mut [usize]) -> isize {
+    sys_pipe(pipe_fd)
+}
+\end{lstlisting}
+
+\subsection{进程管理接口}
+
+进程管理函数实现了标准的进程控制接口，为多进程应用程序提供了完整的开发支撑：
+
+\begin{lstlisting}[language=Rust,caption={用户态进程管理}, label={lst:user-process-ops}]
+pub fn fork() -> isize {
+    sys_fork()
+}
+
+pub fn exec(path: &str, args: &[*const u8]) -> isize {
+    sys_exec(path, args)
+}
+
+pub fn wait(exit_code: &mut i32) -> isize {
+    loop {
+        match sys_waitpid(-1, exit_code as *mut _) {
+            -2 => { yield_(); }
+            pid => return pid,
+        }
+    }
+}
+
+pub fn waitpid(pid: usize, exit_code: &mut i32) -> isize {
+    loop {
+        match sys_waitpid(pid as isize, exit_code as *mut _) {
+            -2 => { yield_(); }
+            pid => return pid,
+        }
+    }
+}
+
+pub fn exit(exit_code: i32) -> ! {
+    sys_exit(exit_code);
+    panic!("sys_exit never returns!");
+}
+\end{lstlisting}
+
+\subsection{信号处理接口}
+
+信号处理函数提供了完整的信号处理能力，支持信号发送、处理程序安装、信号屏蔽等高级功能：
+
+\begin{lstlisting}[language=Rust,caption={用户态信号处理}, label={lst:user-signal-ops}]
+#[repr(C)]
+pub struct SignalAction {
+    pub handler: usize,
+    pub mask: SignalFlags,
+}
+
+pub fn kill(pid: usize, signum: i32) -> isize {
+    sys_kill(pid, signum)
+}
+
+pub fn sigaction(
+    signum: i32,
+    action: Option<&SignalAction>,
+    old_action: Option<&mut SignalAction>,
+) -> isize {
+    sys_sigaction(
+        signum,
+        action.map_or(core::ptr::null(), |a| a),
+        old_action.map_or(core::ptr::null_mut(), |a| a),
+    )
+}
+
+pub fn sigprocmask(mask: u32) -> isize {
+    sys_sigprocmask(mask)
+}
+
+pub fn sigreturn() -> isize {
+    sys_sigreturn()
+}
+\end{lstlisting}
+
+这样使得用户程序可以使用类型安全的Rust接口进行系统调用，
+而底层的参数转换和错误处理对应用程序完全透明，也可以简化了用户程序的开发复杂度。

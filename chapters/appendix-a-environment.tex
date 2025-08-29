@@ -1,0 +1,164 @@
+\chapter{环境配置}
+
+本附录主要介绍构建和运行NimlothOS所需的开发环境配置。为了确保项目能够正常编译和运行，请按照以下步骤配置环境。
+
+\section{系统要求}
+
+推荐使用Linux系统，Windows用户可以通过WSL2获得良好体验。
+
+\textbf{操作系统要求：}
+\begin{itemize}
+    \item Linux发行版：Ubuntu 20.04+
+    \item Windows：通过WSL2环境支持，推荐使用Ubuntu 20.04 LTS子系统
+\end{itemize}
+
+\section{Rust工具链配置}
+
+NimlothOS使用Rust语言开发，需要配置特定版本的Rust工具链以确保编译的一致性和稳定性。
+
+\subsection{Rust版本要求}
+
+项目使用固定的Rust nightly版本以确保构建的可重现性：
+
+\begin{lstlisting}[language=bash]
+# 安装指定的Rust nightly版本
+rustup install nightly-2025-02-18
+rustup default nightly-2025-02-18
+# 验证Rust版本
+rustc --version
+# 应显示：rustc 1.77.0-nightly (hash 2025-02-18)
+\end{lstlisting}
+
+选择nightly版本是因为NimlothOS需要使用一些实验性的Rust特性，如内联汇编、无标准库开发等功能。
+
+\subsection{目标架构配置}
+
+添加RISC-V 64位目标架构支持：
+
+\begin{lstlisting}[language=bash]
+# 添加RISC-V 64位目标架构
+rustup target add riscv64gc-unknown-none-elf
+# 验证目标架构安装
+rustup target list --installed | grep riscv64
+\end{lstlisting}
+
+\texttt{riscv64gc-unknown-none-elf}目标架构表示：
+\begin{itemize}
+    \item \texttt{riscv64}：RISC-V 64位架构
+    \item \texttt{gc}：包含通用扩展(G)和压缩指令扩展(C)
+    \item \texttt{unknown}：未指定供应商
+    \item \texttt{none}：无操作系统环境（裸机开发）
+    \item \texttt{elf}：使用ELF二进制格式
+\end{itemize}
+
+\subsection{组件安装}
+
+安装Rust开发所需的一些组件：
+
+\begin{lstlisting}[language=bash]
+# 安装Rust源码（用于构建核心库）
+rustup component add rust-src
+# 安装LLVM工具（用于二进制文件操作）
+rustup component add llvm-tools-preview
+\end{lstlisting}
+
+\subsection{Cargo扩展工具}
+
+安装用于二进制文件操作的Cargo扩展：
+
+\begin{lstlisting}[language=bash]
+# 安装cargo-binutils
+cargo install cargo-binutils
+# 验证安装
+cargo objdump --version
+cargo objcopy --version
+\end{lstlisting}
+
+\texttt{cargo-binutils}提供了Rust版本的二进制工具，包括：
+\begin{itemize}
+    \item \texttt{cargo objdump}：反汇编工具
+    \item \texttt{cargo objcopy}：二进制格式转换工具
+    \item \texttt{cargo size}：分析二进制文件大小
+    \item \texttt{cargo nm}：符号表查看工具
+\end{itemize}
+
+\section{QEMU虚拟机配置}
+
+QEMU是运行NimlothOS的核心虚拟化环境，提供了完整的RISC-V硬件模拟支持。
+
+\subsection{QEMU安装}
+
+\begin{lstlisting}[language=bash]
+# Ubuntu安装
+sudo apt update
+sudo apt install qemu-system-misc
+# 验证安装和版本
+qemu-system-riscv64 --version
+# 推荐版本：QEMU emulator version 7.0+
+\end{lstlisting}
+
+\subsection{版本要求说明}
+
+NimlothOS要求QEMU版本不低于7.0，当前测试版本为7.2.0。
+
+\subsection{QEMU配置验证}
+
+验证QEMU的RISC-V支持：
+
+\begin{lstlisting}[language=bash]
+# 检查支持的机器类型
+qemu-system-riscv64 -machine help | grep virt
+# 检查支持的CPU类型
+qemu-system-riscv64 -cpu help
+\end{lstlisting}
+
+\section{RISC-V交叉编译工具链}
+
+虽然NimlothOS主要使用Rust开发，但某些调试和分析任务仍需要传统的GCC工具链支持。
+
+\subsection{GCC工具链安装}
+
+安装RISC-V交叉编译工具链：
+
+\begin{lstlisting}[language=bash]
+# Ubuntu/Debian系统
+sudo apt install gcc-riscv64-unknown-elf gdb-multiarch
+# 验证安装
+riscv64-unknown-elf-gcc --version
+# 推荐版本：9.3.0+
+riscv64-unknown-elf-gdb --version
+\end{lstlisting}
+
+对于其他发行版，可能需要从源码编译或使用第三方仓库。
+
+\section{环境验证}
+
+完成所有配置后，通过以下步骤验证环境是否正确配置：
+
+\subsection{工具链验证}
+
+\begin{lstlisting}[language=bash]
+# 验证Rust工具链
+rustc --version | grep nightly-2025-02-18
+rustup target list --installed | grep riscv64gc-unknown-none-elf
+cargo objdump --version
+# 验证QEMU
+qemu-system-riscv64 --version | grep "version 7"
+# 验证GCC工具链
+riscv64-unknown-elf-gcc --version
+\end{lstlisting}
+
+\subsection{项目构建测试}
+
+克隆并构建NimlothOS项目进行最终验证：
+
+\begin{lstlisting}[language=bash]
+# 克隆项目
+git clone https://github.com/Tinuvile/NimlothOS.git
+cd NimlothOS
+# 构建内核
+cd os
+make build
+# 运行系统
+make run
+\end{lstlisting}
